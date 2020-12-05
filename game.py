@@ -24,9 +24,12 @@ class Player(pygame.sprite.Sprite):
         self.image = player_img
         self.image.set_colorkey(WHITE)
         self.rect = self.image.get_rect()
+        self.radius = 25
         self.rect.centerx = WIDTH / 2
         self.rect.bottom = HEIGHT - 10
         self.speedx = 0
+        self.shield = 100
+
     
     def update(self):
         self.speedx = 0
@@ -56,14 +59,16 @@ class Mob(pygame.sprite.Sprite):
         self.image_orig.set_colorkey(BLACK)
         self.image_orig = pygame.transform.scale(
             self.image_orig, 
-            (random.randint(10, 150), random.randint(10, 150))
+            (random.randint(25, 150), random.randint(25, 150))
             )
         self.image = self.image_orig.copy()
         self.rect = self.image.get_rect()
+        self.radius = int(self.rect.width / 2)
         self.rect.x = random.randrange(WIDTH - self.rect.width)
         self.rect.y = random.randrange(-100, -40)
         self.speedy = random.randrange(1, 8)
         self.speedx = random.randrange(-3, 3)
+
 
         self.rot = 0
         self.rot_speed = random.randrange(-8, 8)
@@ -112,6 +117,24 @@ def draw_text(surf, text, size, x, y):
     surf.blit(text_surface, text_rect)
 
 
+def draw_shield_bar(surf, x, y, pct):
+    if pct < 0:
+        pct = 0
+    BAR_LENGTH = 100
+    BAR_HEIGHT = 10
+    fill = (pct / 100) * BAR_LENGTH
+    outline_rect = pygame.Rect(x, y, BAR_LENGTH, BAR_HEIGHT)
+    fill_rect = pygame.Rect(x, y, fill, BAR_HEIGHT)
+    pygame.draw.rect(surf, RED, fill_rect)
+    pygame.draw.rect(surf, WHITE, outline_rect, 2)
+
+
+def new_mob():
+    m = Mob()
+    all_sprites.add(m)
+    mobs.add(m)
+
+
 pygame.init()
 pygame.mixer.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -144,7 +167,7 @@ shoot_sounds.append(pygame.mixer.Sound(path.join(sound_folder, "Orgasm_6.mp3")))
 exp_sound = pygame.mixer.Sound(path.join(sound_folder, "fuck you....mp3"))
 
 # Музыка
-pygame.mixer.music. load(path.join(music_folder, "cadilac.mp3"))
+pygame.mixer.music.  load(path.join(music_folder, "cadilac.mp3"))
 pygame.mixer.music.set_volume(0.4)
 
 
@@ -156,9 +179,7 @@ bullets = pygame.sprite.Group()
 player = Player()
 all_sprites.add(player)
 for i in range(8):
-    m = Mob()
-    all_sprites.add(m)
-    mobs.add(m)
+    new_mob()
 
 
 score = 0
@@ -180,25 +201,26 @@ while running:
     all_sprites.update()
 
     # Проверка, не ударил ли моб игрока
-    hit_player = pygame.sprite.spritecollide(player, mobs, False)
-    if hit_player:
-        running = False
+    hits_player = pygame.sprite.spritecollide(player, mobs, True, pygame.sprite.collide_circle)
+    for hit in hits_player:
+        player.shield -= sum(hit.rect.size)*.1
+        new_mob()
+        if player.shield <= 0:
+            running = False
     
     # Проверка, не ударил ли моб игрока
-    hits_mobs = pygame.sprite.groupcollide(mobs, bullets, True, True)
+    hits_mobs = pygame.sprite.groupcollide(mobs, bullets, True, True, pygame.sprite.collide_circle)
     for hit in hits_mobs:
         score += 300 - sum(hit.rect.size)
-        m = Mob()
-        all_sprites.add(m)
-        mobs.add(m)
-        exp_sound.play()
+        new_mob()
 
     # Рендеринг
     screen.fill(BLACK)
     screen.blit(bg, bg_rect)
     all_sprites.draw(screen)
     draw_text(screen, str(score), 18, WIDTH / 2, 10)
+    draw_shield_bar(screen, 5, 5, player.shield)
     # После отрисовки переворачиваем экран
     pygame.display.flip()
 
-pygame.quit()
+pygame.quit()  
