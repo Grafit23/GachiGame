@@ -14,6 +14,9 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
+POWERUP_TIME = 5000
+POWER_UPS_RARE = .97
+
 img_folder = path.join(path.dirname(__file__), 'img')
 sound_folder = path.join(path.dirname(__file__), 'sounds')
 music_folder = path.join(path.dirname(__file__), 'music')
@@ -21,7 +24,8 @@ music_folder = path.join(path.dirname(__file__), 'music')
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
-        self.image = player_imgaes[0]
+        self.pic = 'basic'
+        self.image = player_images[self.pic][0]
         self.image.set_colorkey(BLACK)
         self.rect = self.image.get_rect()
         self.radius = 25
@@ -37,11 +41,14 @@ class Player(pygame.sprite.Sprite):
         self.last_update = pygame.time.get_ticks()
         self.frame_rate = 80
         self.frame = 0
-        self.size = len(player_imgaes)
+        self.size = len(player_images[self.pic])
 
         self.lives = 3
         self.hidden = False
         self.hide_timer = pygame.time.get_ticks()
+
+        self.power = 1
+        self.power_time = pygame.time.get_ticks()
     
     def update(self):
         self.speedx = 0
@@ -66,27 +73,52 @@ class Player(pygame.sprite.Sprite):
             self.frame += 1
             if self.frame == self.size:
                 self.frame = 0
-            self.image = player_imgaes[self.frame]
+            self.image = player_images[self.pic][self.frame]
             self.image.set_colorkey(BLACK)
         
         if self.hidden and pygame.time.get_ticks() - self.hide_timer > 1000:
 	        self.hidden = False
 	        self.rect.centerx = WIDTH / 2
 	        self.rect.bottom = HEIGHT - 10
+        
+        # тайм-аут для бонусов
+        if self.power >= 2 and pygame.time.get_ticks() - self.power_time > POWERUP_TIME:
+            self.power -= 1
+            self.power_time = pygame.time.get_ticks()
+            if self.power < 2:
+                self.pic = 'basic'
+                self.frame = 0
+                self.size = len(player_images[self.pic])
     
     def shoot(self):
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.shoot_delay:
             self.last_shot = now
-            bullet = Bullet(self.rect.centerx, self.rect.top)
-            all_sprites.add(bullet)
-            bullets.add(bullet)
-            random.choice(shoot_sounds).play()
+            if self.power == 1:
+                bullet = Bullet(self.rect.centerx, self.rect.top)
+                all_sprites.add(bullet)
+                bullets.add(bullet)
+                random.choice(shoot_sounds).play()
+            elif self.power >= 2:
+                bullet1 = Bullet(self.rect.left, self.rect.centery)
+                bullet2 = Bullet(self.rect.right, self.rect.centery)
+                all_sprites.add(bullet1)
+                all_sprites.add(bullet2)
+                bullets.add(bullet1)
+                bullets.add(bullet2)
+                random.choice(shoot_sounds).play()
     
     def hide(self):
         self.hidden = True
         self.hide_timer = pygame.time.get_ticks()
         self.rect.center = (WIDTH / 2, HEIGHT + 200)
+    
+    def powerup(self):
+        self.power += 1
+        self.power_time = pygame.time.get_ticks()
+        self.pic = 'absolute'
+        self.frame = 0
+        self.size = len(player_images[self.pic])
 
 
 class Mob(pygame.sprite.Sprite):
@@ -226,6 +258,22 @@ def new_mob():
     mobs.add(m)
 
 
+def show_go_screen():
+    screen.blit(bg_menu, bg_menu_rect)
+    draw_text(screen, "Gachi Game", 64, WIDTH / 2, HEIGHT / 4)
+    draw_text(screen, "Нажми Space ,чтобы начать fisting", 22,
+              WIDTH / 2, HEIGHT / 2)
+    draw_text(screen, "Нажми чего-нить ,чтобы начать гачить", 18, WIDTH / 2, HEIGHT * 3 / 4)
+    pygame.display.flip()
+    waiting = True
+    while waiting:
+        clock.tick(FPS)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+            if event.type == pygame.KEYUP:
+                waiting = False
+
 pygame.init()
 pygame.mixer.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -234,9 +282,15 @@ clock = pygame.time.Clock()
 
 
 # Загрузка игровой графики
-bg = pygame.image.load(path.join(img_folder, r"Backgrounds\billy.jpg")).convert()
-bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
-bg_rect = bg.get_rect()
+bg_main = pygame.image.load(path.join(img_folder, "Backgrounds/billy.jpg")).convert()
+bg_main = pygame.transform.scale(bg_main, (WIDTH, HEIGHT))
+bg_main_rect = bg_main.get_rect()
+bg_pu = pygame.image.load(path.join(img_folder, "Backgrounds/billy_h_smilling.jpg")).convert()
+bg_pu = pygame.transform.scale(bg_pu, (WIDTH, HEIGHT))
+bg_pu_rect = bg_pu.get_rect()
+bg_menu = pygame.image.load(path.join(img_folder, "Backgrounds/billy_h_not_smilling.jpg")).convert()
+bg_menu = pygame.transform.scale(bg_menu, (WIDTH, HEIGHT))
+bg_menu_rect = bg_menu.get_rect()
 # Спрайт игрока
 player_imgaes = []
 absolute_player_images = []
@@ -248,11 +302,13 @@ for i in range(20):
     player_imgaes.append(player_img)
     player_img = pygame.image.load(path.join(img_folder, f"absolute_billy_h/IMG000{i}.bmp")).convert()
     player_img = pygame.transform.scale(player_img, (50, 50))
+    player_img.set_colorkey(BLACK)
     absolute_player_images.append(player_img)
+player_images = {'basic':player_imgaes, 'absolute':absolute_player_images}
 # Спрайт врагов
 enemy_images = []
-for i in range(4):
-    enemy_img = pygame.image.load(path.join(img_folder, f"enemy_{i}.jpg")).convert()  
+for i in range(8):
+    enemy_img = pygame.image.load(path.join(img_folder, f"enemy_{i}.jpg")).convert()
     enemy_images.append(enemy_img)
 # Спрайт снарядов
 bullet_img = pygame.image.load(path.join(img_folder, r"heart.jpg")).convert()
@@ -297,30 +353,36 @@ shoot_sounds.append(pygame.mixer.Sound(path.join(sound_folder, "Orgasm_6.mp3")))
 exp_sound = pygame.mixer.Sound(path.join(sound_folder, "fuck you....mp3"))
 death_sound = pygame.mixer.Sound(path.join(sound_folder, 'Iam cumming.mp3'))
 hit_sound = pygame.mixer.Sound(path.join(sound_folder, 'Fucking slaves get your ass back here.mp3'))
+shield_sound = pygame.mixer.Sound(path.join(sound_folder, 'WOO.mp3'))
+shield_sound.set_volume(.5)
+gun_sound = pygame.mixer.Sound(path.join(sound_folder, 'Boy next door.mp3'))
+gun_sound.set_volume(6)
 
 # Музыка
-pygame.mixer.music.  load(path.join(music_folder, "cadilac.mp3"))
+mus = ["cadilac.mp3", "soldati.mp3", 'valim.mp3', 'fic.mp3']
+mus_current = random.choice(mus)
+pygame.mixer.music.load(path.join(music_folder, mus_current))
 pygame.mixer.music.set_volume(0.4)
 
 
-# Группы спрайтов
-all_sprites = pygame.sprite.Group()
-mobs = pygame.sprite.Group()
-bullets = pygame.sprite.Group()
-powerups = pygame.sprite.Group()
-
-
-player = Player()
-all_sprites.add(player)
-for i in range(8):
-    new_mob()
-
-
-score = 0
-pygame.mixer.music.play(loops=-1)
 # Цикл игры
 running = True
+game_over = True
 while running:
+    if game_over:
+        show_go_screen()
+        game_over = False
+        # Группы спрайтов
+        all_sprites = pygame.sprite.Group()
+        mobs = pygame.sprite.Group()
+        bullets = pygame.sprite.Group()
+        powerups = pygame.sprite.Group()
+        player = Player()
+        all_sprites.add(player)
+        for i in range(8):
+            new_mob()
+        score = 0
+        pygame.mixer.music.play(loops=-1)
     # цикл на правильной скорости
     clock.tick(FPS)
     # События
@@ -348,7 +410,7 @@ while running:
     
     # Если игрок умер, игра окончена
     if player.lives == 0 and not death_explosion.alive():
-	    running = False
+	    game_over = True
 
     # Проверка, не ударил ли моб игрока
     hits_mobs = pygame.sprite.groupcollide(mobs, bullets, True, True, pygame.sprite.collide_circle)
@@ -356,7 +418,7 @@ while running:
         score += 450 - sum(hit.rect.size)
         expl = Explosion(hit.rect.center, 'ls')
         all_sprites.add(expl)
-        if random.random() > 0.98:
+        if random.random() > POWER_UPS_RARE:
             pu = Pow(hit.rect.center)
             all_sprites.add(pu)
             powerups.add(pu)
@@ -366,14 +428,19 @@ while running:
     for hit in hits:
         if hit.type == 'shield':
             player.shield += random.randrange(10, 30)
+            shield_sound.play()
             if player.shield >= 100:
                 player.shield = 100
         if hit.type == 'gun':
-            pass
+            gun_sound.play()
+            player.powerup()
 
     # Рендеринг
     screen.fill(BLACK)
-    screen.blit(bg, bg_rect)
+    if player.power < 2:
+        screen.blit(bg_main, bg_main_rect)
+    else:
+        screen.blit(bg_pu, bg_pu_rect)
     all_sprites.draw(screen)
     draw_text(screen, str(score), 18, WIDTH / 2, 10)
     draw_shield_bar(screen, 5, 5, player.shield)
