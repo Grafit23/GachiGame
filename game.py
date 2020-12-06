@@ -364,7 +364,6 @@ mus_current = random.choice(mus)
 pygame.mixer.music.load(path.join(music_folder, mus_current))
 pygame.mixer.music.set_volume(0.4)
 
-
 # Цикл игры
 running = True
 game_over = True
